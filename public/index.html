@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Mancala</title>
+    <style>
+      .board {
+        display: flex;
+      }
+      .pit {
+        width: 50px;
+        height: 50px;
+        border: 1px solid black;
+        margin: 5px;
+        text-align: center;
+        cursor: pointer;
+      }
+      .store {
+        width: 80px;
+        height: 100px;
+        border: 1px solid blue;
+        margin: 5px;
+        text-align: center;
+      }
+      .player-info {
+        margin-top: 20px;
+      }
+      #gameLinkDisplay {
+        margin-top: 10px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Mancala</h1>
+    <div class="player-info">
+      <p>Player: <span id="player"></span></p>
+      <p>Turn: <span id="turn"></span></p>
+      <p>Status: <span id="status"></span></p>
+      <button id="resetButton">Reset Game</button>
+    </div>
+
+    <div class="board">
+      <div class="store" id="store1"></div>
+      <div>
+        <div
+          id="pits1"
+          style="display: flex; flex-direction: row-reverse"
+        ></div>
+        <div id="pits0" style="display: flex"></div>
+      </div>
+      <div class="store" id="store0"></div>
+    </div>
+    <div id="gameLinkDisplay"></div>
+
+    <script>
+      let gameId;
+      let player;
+      let eventSource;
+
+      function createPit(index, seeds) {
+        const pit = document.createElement("div");
+        pit.classList.add("pit");
+        pit.id = `pit${index}`;
+        pit.textContent = seeds;
+        pit.addEventListener("click", () => makeMove(index));
+        return pit;
+      }
+
+      function updateBoard(boardState) {
+        boardState.pits.forEach((seeds, index) => {
+          const pit = document.getElementById(`pit${index}`);
+          if (pit) {
+            pit.textContent = seeds;
+          } else {
+            if (index < 6)
+              document
+                .getElementById("pits0")
+                .appendChild(createPit(index, seeds));
+            else
+              document
+                .getElementById("pits1")
+                .appendChild(createPit(index, seeds));
+          }
+        });
+        document.getElementById("store0").textContent = boardState.stores[0];
+        document.getElementById("store1").textContent = boardState.stores[1];
+        document.getElementById("turn").textContent =
+          boardState.turn === 0 ? "Player 1" : "Player 2";
+        if (boardState.gameOver) {
+          if (boardState.winner !== null)
+            document.getElementById("status").textContent =
+              `Game Over. Winner: Player ${boardState.winner + 1}`;
+          else
+            document.getElementById("status").textContent =
+              "Game Over. It is a draw";
+          eventSource.close();
+        }
+      }
+
+      async function makeMove(pitIndex) {
+        if (!gameId || player === undefined) {
+          console.error("Game not initialized.");
+          return;
+        }
+        const response = await fetch(
+          `/game/${gameId}/move/${pitIndex}?player=${player}`,
+          {
+            method: "POST",
+          },
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          alert(errorData.error || "An error occurred.");
+          if (errorData.error === "Invalid session.") window.location.reload(); //reload on bad session.
+          console.error("Move failed:", response.status, response.statusText);
+        }
+      }
+
+      function setupSSE() {
+        eventSource = new EventSource(`/game/${gameId}/events`);
+        eventSource.onmessage = (event) => {
+          const boardState = JSON.parse(event.data);
+          updateBoard(boardState);
+        };
+        eventSource.onerror = (error) => {
+          console.error("SSE error:", error);
+          //consider reconnecting
+        };
+      }
+
+      async function createNewGame() {
+        const response = await fetch("/create", { method: "POST" });
+        const data = await response.json();
+        gameId = data.gameId;
+        player = data.player; // Now returned from /create
+        document.getElementById("player").textContent = player + 1;
+
+        const gameLink = `${window.location.origin}/?gameId=${gameId}`;
+        document.getElementById("gameLinkDisplay").innerHTML =
+          `Game created. Share: <a href="${gameLink}">${gameLink}</a>`;
+        setupSSE();
+
+        const initialStateResponse = await fetch(`/game/${gameId}/state`);
+        const initialBoardState = await initialStateResponse.json();
+        updateBoard(initialBoardState);
+      }
+
+      // Check for gameId in URL on page load
+      window.onload = async () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        gameId = urlParams.get("gameId");
+
+        document
+          .getElementById("resetButton")
+          .addEventListener("click", async () => {
+            if (!gameId) return;
+            await fetch(`/game/${gameId}/reset`);
+          });
+
+        if (gameId) {
+          // Attempt to join the game.  The server will assign the correct player based on session.
+          setupSSE(); // Connect to SSE *first*.  Important for rejoining.
+
+          // We fetch /state *after* connecting to SSE. This ensures we get
+          // the most up-to-date state, even if something changed between page load and now.
+          const initialStateResponse = await fetch(`/game/${gameId}/state`);
+          if (!initialStateResponse.ok) {
+            const errorData = await initialStateResponse.json();
+            if (errorData.error === "Invalid session.") {
+              // Handle invalid session:  Could be a new player joining.
+              //  Here, we assume it's player 2 joining if session is invalid for given gameId.
+              player = 1;
+              document.getElementById("player").textContent = player + 1;
+              document.getElementById("gameLinkDisplay").innerHTML =
+                `Joined Game: ${gameId}`;
+            } else {
+              alert(errorData.error || "Error getting state");
+              console.error(
+                "Error fetching initial state:",
+                initialStateResponse.status,
+                initialStateResponse.statusText,
+              );
+            }
+          } else {
+            const initialBoardState = await initialStateResponse.json(); //now get state
+            updateBoard(initialBoardState);
+
+            //Try and get the player number based on current state, after joining
+            const sessionIdResponse = await fetch(`/game/${gameId}/state`);
+            if (sessionIdResponse.ok) {
+              const sessionData = await sessionIdResponse.json(); //get current state
+              //Now you can get it
+              const urlParams = new URLSearchParams(window.location.search);
+              const gameId = urlParams.get("gameId");
+
+              if (gameId) {
+                const response = await fetch(`/game/${gameId}/state`);
+                if (response.ok) {
+                  const data = await response.json();
+                  if (data && typeof data === "object") {
+                    updateBoard(data); //update with data
+                  }
+                }
+              }
+            }
+          }
+        } else {
+          //no game ID, create a new game
+          await createNewGame();
+        }
+      };
+    </script>
+  </body>
+</html>
