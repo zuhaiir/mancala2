@@ -70,7 +70,7 @@ function makeMove(
     currentPit < rangeMax &&
     board.pits[currentPit] === 1
   ) {
-    const oppositePit = 13 - currentPit;
+    const oppositePit = 12 - currentPit;
     const capturedSeeds = board.pits[oppositePit];
     board.pits[oppositePit] = 0;
     board.pits[(player + 1) * 6 + player] += capturedSeeds + 1;

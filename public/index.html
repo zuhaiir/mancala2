@@ -3,26 +3,9 @@
   <head>
     <title>Mancala</title>
     <style>
-      .board {
-        display: flex;
-      }
-      .pit {
-        width: 50px;
-        height: 50px;
-        border: 1px solid black;
-        margin: 5px;
-        text-align: center;
-        cursor: pointer;
-      }
-      .store {
-        width: 80px;
-        height: 100px;
-        border: 1px solid blue;
-        margin: 5px;
-        text-align: center;
-      }
-      .player-info {
-        margin-top: 20px;
+      * {
+        margin: 0;
+        padding: 0;
       }
       #gameLinkDisplay {
         margin-top: 10px;
@@ -30,14 +13,6 @@
     </style>
   </head>
   <body>
-    <h1>Mancala or is this even working</h1>
-    <div class="player-info">
-      <p>Player: <span id="player"></span></p>
-      <p>Turn: <span id="turn"></span></p>
-      <p>Status: <span id="status"></span></p>
-      <button id="resetButton">Reset Game</button>
-    </div>
-
     <div class="board">
       <div>
         <div id="pits1" style="display: flex"></div>
@@ -64,14 +39,6 @@
       backgroundImg.src = "/public/background.png"; // Update this line to include /public/
       const fishImg = new Image();
       fishImg.src = "/public/fish.png";
-      function createPit(index, seeds) {
-        const pit = document.createElement("div");
-        pit.classList.add("pit");
-        pit.id = `pit${index}`;
-        pit.textContent = seeds;
-        pit.addEventListener("click", () => makeMove(index));
-        return pit;
-      }
 
       function updateBoard(boardState) {
         ctx.drawImage(backgroundImg, 0, 0);
@@ -94,8 +61,6 @@
         });
         document.body.style.backgroundColor =
           boardState.turn === 0 ? "#eb6157" : "#5797eb";
-        document.getElementById("turn").textContent =
-          boardState.turn === 0 ? "Player 1" : "Player 2";
         if (boardState.gameOver) {
           if (boardState.winner !== null)
             document.getElementById(
@@ -164,13 +129,6 @@
         };
         const urlParams = new URLSearchParams(window.location.search);
         gameId = urlParams.get("gameId");
-
-        document
-          .getElementById("resetButton")
-          .addEventListener("click", async () => {
-            if (!gameId) return;
-            await fetch(`/game/${gameId}/reset`);
-          });
 
         if (gameId) {
           // Attempt to join the game.  The server will assign the correct player based on session.
