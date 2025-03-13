@@ -89,6 +89,9 @@
           alert(errorData.error || "An error occurred.");
           if (errorData.error === "Invalid session.") window.location.reload(); //reload on bad session.
           console.error("Move failed:", response.status, response.statusText);
+        } else {
+          const boardState = await response.json();
+          updateBoard(boardState);
         }
       }
 

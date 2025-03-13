@@ -121,7 +121,6 @@ app.use("/game/:gameId/*", async (c, next) => {
     return c.json({ error: "Game not found." }, 404);
   }
   let sessionId = getCookie(c, "sessionId");
-  console.log(sessionId);
   if (!sessionId) {
     sessionId = uuidv4();
     setCookie(c, "sessionId", sessionId, {
@@ -156,11 +155,9 @@ app.post("/create", async (c) => {
 
 // this route gets the board state
 app.get("/game/:gameId/state", async (c) => {
-  const { gameId } = c.req.param();
   const { game } = c.get("session") as {
     game: Game;
   }; // Retrieve from context
-
   return c.json(game.board);
 });
 
@@ -170,7 +167,6 @@ app.post("/game/:gameId/move/:pitIndex", async (c) => {
     sessionId: string;
     game: Game;
   }; // Retrieve from context
-  console.log(game);
   const player = game.playerSessions.indexOf(sessionId);
 
   if (player === -1) {
@@ -188,7 +184,6 @@ app.post("/game/:gameId/move/:pitIndex", async (c) => {
 });
 
 app.get("/game/:gameId/events", async (c) => {
-  const { gameId } = c.req.param();
   const { sessionId, game } = c.get("session") as {
     sessionId: string;
     game: Game;
