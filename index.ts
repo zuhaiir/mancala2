@@ -3,7 +3,6 @@ import { serveStatic } from "hono/bun";
 import { streamSSE } from "hono/streaming";
 import { getCookie, setCookie } from "hono/cookie";
 import { v4 as uuidv4 } from "uuid";
-import { createMiddleware } from "hono/factory";
 
 interface BoardState {
   pits: number[];
@@ -30,64 +29,88 @@ function getInitialBoard(): BoardState {
   };
 }
 
-function makeMove(board: BoardState, pitIndex: number, player: number): BoardState | { error: string } {
-    if (board.gameOver) {
-        return { error: 'Game is over.' };
-    }
-    if (player !== board.turn) {
-        return { error: 'Not your turn.' };
-    }
-    if (pitIndex < 0 || pitIndex > 12 || pitIndex == 6) {
-        return { error: 'Invalid pit index.' };
-    }
-    const playerPits = player === 0 ? [0, 1, 2, 3, 4, 5] : [6, 7, 8, 9, 10, 11];
-    if (!playerPits.includes(pitIndex)) {
-        return { error: 'Cannot move from opponents pit.' };
-    }
-    if (board.pits[pitIndex] === 0) {
-        return { error: 'Pit is empty.' };
-    }
+function makeMove(
+  board: BoardState,
+  pitIndex: number,
+  player: number
+): BoardState | { error: string } {
+  if (board.gameOver) {
+    return { error: "Game is over." };
+  }
+  if (player !== board.turn) {
+    return { error: "Not your turn." };
+  }
+  if (pitIndex < 0 || pitIndex > 12 || pitIndex == 6) {
+    return { error: "Invalid pit index." };
+  }
 
-    let seeds = board.pits[pitIndex];
-    board.pits[pitIndex] = 0;
-    let currentPit = pitIndex;
+  const rangeMin = player * 7;
+  const rangeMax = rangeMin + 6;
+  if (!(pitIndex >= rangeMin && pitIndex < rangeMax)) {
+    return { error: "Cannot move from opponents pit." };
+  }
+  if (board.pits[pitIndex] === 0) {
+    return { error: "Pit is empty." };
+  }
+  let seeds = board.pits[pitIndex];
+  board.pits[pitIndex] = 0;
+  let currentPit = pitIndex;
 
-    while (seeds > 0) {
-        currentPit = (currentPit + 1) % 14;
-        if (player === 1 && currentPit === 6) currentPit = (currentPit + 1) % 14; //skip store
-        if (player === 0 && currentPit === 13) currentPit = (currentPit + 1) % 14; // skip store
-        board.pits[currentPit]++;
-        seeds--;
-    }
+  while (seeds > 0) {
+    currentPit = (currentPit + 1) % 14;
+    if (player === 1 && currentPit === 6) currentPit = (currentPit + 1) % 14; //skip store
+    if (player === 0 && currentPit === 13) currentPit = (currentPit + 1) % 14; // skip store
+    board.pits[currentPit]++;
+    seeds--;
+  }
 
-    // Capture logic
-    if (playerPits.includes(currentPit) && board.pits[currentPit] === 1) {
-        const oppositePit = 11 - currentPit;
-        const capturedSeeds = board.pits[oppositePit];
-        board.pits[oppositePit] = 0;
-        board.pits[(player + 1) * 6 + player] += capturedSeeds + 1;
-        board.pits[currentPit] = 0;
-    }
+  // Capture logic
+  if (
+    currentPit >= rangeMin &&
+    currentPit < rangeMax &&
+    board.pits[currentPit] === 1
+  ) {
+    const oppositePit = 13 - currentPit;
+    const capturedSeeds = board.pits[oppositePit];
+    board.pits[oppositePit] = 0;
+    board.pits[(player + 1) * 6 + player] += capturedSeeds + 1;
+    board.pits[currentPit] = 0;
+  }
 
-    // Check for game over
-    const player0PitsEmpty = board.pits.slice(0, 6).every(seeds => seeds === 0);
-    const player1PitsEmpty = board.pits.slice(7, 13).every(seeds => seeds === 0);
+  // Check for game over
+  const player0PitsEmpty = board.pits.slice(0, 6).every((seeds) => seeds === 0);
+  const player1PitsEmpty = board.pits
+    .slice(7, 13)
+    .every((seeds) => seeds === 0);
 
-    if (player0PitsEmpty || player1PitsEmpty) {
-        board.gameOver = true;
-        if (player0PitsEmpty) {
-            board.pits[13] += board.pits.slice(7, 13).reduce((a, b) => a + b, 0);
-        } else {
-            board.pits[6] += board.pits.slice(0, 6).reduce((a, b) => a + b, 0);
-        }
-        board.pits.fill(0);
-        board.winner = board.pits[6] > board.pits[13] ? 0 : (board.pits[13] > board.pits[6] ? 1 : null);
+  if (player0PitsEmpty || player1PitsEmpty) {
+    board.gameOver = true;
+    if (player0PitsEmpty) {
+      board.pits[13] += board.pits.slice(7, 13).reduce((a, b) => a + b, 0);
     } else {
-        if (!(player === 0 && currentPit === 6) && !(player === 1 && currentPit === 13)) board.turn = player === 0 ? 1 : 0;
+      board.pits[6] += board.pits.slice(0, 6).reduce((a, b) => a + b, 0);
     }
-    return board;
+    board.pits.fill(0);
+    board.winner =
+      board.pits[6] > board.pits[13]
+        ? 0
+        : board.pits[13] > board.pits[6]
+        ? 1
+        : null;
+  } else {
+    if (
+      !(player === 0 && currentPit === 6) &&
+      !(player === 1 && currentPit === 14)
+    )
+      board.turn = player === 0 ? 1 : 0;
+  }
+  return board;
 }
 const app = new Hono();
+
+app.use("/public/*", serveStatic({ root: "./" }));
+
+app.get("/", serveStatic({ path: "public" }));
 
 // middleware to check if game and session exist
 // 404 if no game exists. Create a new session if no sessoin exists.
@@ -98,19 +121,18 @@ app.use("/game/:gameId/*", async (c, next) => {
     return c.json({ error: "Game not found." }, 404);
   }
   let sessionId = getCookie(c, "sessionId");
+  console.log(sessionId);
   if (!sessionId) {
     sessionId = uuidv4();
     setCookie(c, "sessionId", sessionId, {
       httpOnly: true,
       secure: true,
       sameSite: "Strict",
-      path: "/",
     });
   }
   c.set("session", { sessionId, game }); // Store session data in context
   await next(); // Proceed to the next middleware or route handler
 });
-app.get("/", serveStatic({ path: "./public/" }));
 
 // Create a new game (No session check needed here)
 app.post("/create", async (c) => {
@@ -126,7 +148,6 @@ app.post("/create", async (c) => {
     httpOnly: true,
     secure: true,
     sameSite: "Strict",
-    path: "/",
   });
   games[gameId].playerSessions[0] = sessionId;
 
@@ -144,7 +165,7 @@ app.get("/game/:gameId/state", async (c) => {
 });
 
 app.post("/game/:gameId/move/:pitIndex", async (c) => {
-  const { gameId, pitIndex } = c.req.param();
+  const { pitIndex } = c.req.param();
   const { sessionId, game } = c.get("session") as {
     sessionId: string;
     game: Game;
@@ -152,8 +173,6 @@ app.post("/game/:gameId/move/:pitIndex", async (c) => {
   console.log(game);
   const player = game.playerSessions.indexOf(sessionId);
 
-  console.log(sessionId);
-  console.log(player);
   if (player === -1) {
     return c.json({ error: "Invalid player for session." }, 401);
   }
@@ -176,7 +195,7 @@ app.get("/game/:gameId/events", async (c) => {
   }; // Retrieve from context
 
   //Check if player slot is taken.
-  if (!game.playerSessions.includes(sessionId)){
+  if (!game.playerSessions.includes(sessionId)) {
     for (let i = 0; i < game.playerSessions.length; i++) {
       if (game.playerSessions[i] === null) {
         game.playerSessions[i] = sessionId;
@@ -200,4 +219,10 @@ app.get("/game/:gameId/events", async (c) => {
   });
 });
 
-export default app;
+Bun.serve({
+  fetch: app.fetch,
+  port: 3000,
+  hostname: "0.0.0.0",
+});
+
+console.log(`Server running on http://0.0.0.0:${3000}`);

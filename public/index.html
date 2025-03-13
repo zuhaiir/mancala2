@@ -30,7 +30,7 @@
     </style>
   </head>
   <body>
-    <h1>Mancala</h1>
+    <h1>Mancala or is this even working</h1>
     <div class="player-info">
       <p>Player: <span id="player"></span></p>
       <p>Turn: <span id="turn"></span></p>
@@ -48,11 +48,22 @@
       </div>
     </div>
     <div id="gameLinkDisplay"></div>
-
+    <canvas
+      id="canvas"
+      height="256"
+      width="96"
+      style="height: 100vh; image-rendering: pixelated"
+    >
+    </canvas>
     <script>
       let gameId;
       let eventSource;
-
+      const c = document.getElementById("canvas");
+      const ctx = c.getContext("2d");
+      const backgroundImg = new Image();
+      backgroundImg.src = "/public/background.png"; // Update this line to include /public/
+      const fishImg = new Image();
+      fishImg.src = "/public/fish.png";
       function createPit(index, seeds) {
         const pit = document.createElement("div");
         pit.classList.add("pit");
@@ -63,21 +74,40 @@
       }
 
       function updateBoard(boardState) {
+        ctx.drawImage(backgroundImg, 0, 0);
         boardState.pits.forEach((seeds, index) => {
+          const squareSize = Math.floor(Math.sqrt(seeds));
+          for (let i = 0; i < seeds; i++) {
+            const colOffset = (i % squareSize) * 8;
+            const rowOffset = Math.floor(i / squareSize) * 8;
+            const squareOffset = ((squareSize / 2) * 8) / 2;
+            ctx.drawImage(
+              fishImg,
+              -8 + 32 + Math.floor(index / 7) * 32 + colOffset - squareOffset,
+              8 +
+                (32 + (index % 7) * 32) * (1 - Math.floor(index / 7)) +
+                Math.floor(index / 7) * (256 - 64 - 32 * (index % 7)) +
+                rowOffset -
+                squareOffset
+            );
+          }
           const pit = document.getElementById(`pit${index}`);
           if (pit) {
             pit.textContent = seeds;
           } else {
-            if (index < 7)
+            if (index < 7) {
               document
                 .getElementById("pits0")
                 .appendChild(createPit(index, seeds));
-            else
+            } else {
               document
                 .getElementById("pits1")
                 .appendChild(createPit(index, seeds));
+            }
           }
         });
+        document.body.style.backgroundColor =
+          boardState.turn === 0 ? "#eb6157" : "#5797eb";
         document.getElementById("turn").textContent =
           boardState.turn === 0 ? "Player 1" : "Player 2";
         if (boardState.gameOver) {
@@ -129,6 +159,7 @@
         gameId = data.gameId;
 
         const gameLink = `${window.location.origin}/?gameId=${gameId}`;
+        history.pushState({}, "", `/?gameId=${gameId}`);
         document.getElementById(
           "gameLinkDisplay"
         ).innerHTML = `Game created. Share: <a href="${gameLink}">${gameLink}</a>`;
@@ -141,6 +172,10 @@
 
       // Check for gameId in URL on page load
       window.onload = async () => {
+        // Draw the image on the canvas once it loads
+        backgroundImg.onload = function () {
+          ctx.drawImage(backgroundImg, 0, 0, canvas.width, canvas.height);
+        };
         const urlParams = new URLSearchParams(window.location.search);
         gameId = urlParams.get("gameId");
 
@@ -188,11 +223,31 @@
                 }
               }
             }
+            // Event listener for canvas clicks
           }
         } else {
           //no game ID, create a new game
           await createNewGame();
         }
+        c.addEventListener("click", function (event) {
+          // Get mouse position relative to canvas
+          const rect = canvas.getBoundingClientRect(); // Get canvas position and size
+          const scaleX = canvas.width / rect.width; // Scale factor in X
+          const scaleY = canvas.height / rect.height; // Scale factor in Y
+
+          // Convert mouse coordinates to canvas coordinates
+          const mouseX = (event.clientX - rect.left) * scaleX;
+          const mouseY = (event.clientY - rect.top) * scaleY;
+
+          console.log(mouseX, mouseY);
+          let adjustedX = Math.floor((mouseX - 16) / 32);
+          let adjustedY = Math.floor((mouseY - 32) / 32);
+
+          let newIndex =
+            (1 - adjustedX) * adjustedY + adjustedX * (12 - adjustedY);
+          console.log(newIndex);
+          makeMove(newIndex);
+        });
       };
     </script>
   </body>
