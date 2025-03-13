@@ -100,7 +100,7 @@ function makeMove(
   } else {
     if (
       !(player === 0 && currentPit === 6) &&
-      !(player === 1 && currentPit === 14)
+      !(player === 1 && currentPit === 13)
     )
       board.turn = player === 0 ? 1 : 0;
   }

@@ -91,20 +91,6 @@
                 squareOffset
             );
           }
-          const pit = document.getElementById(`pit${index}`);
-          if (pit) {
-            pit.textContent = seeds;
-          } else {
-            if (index < 7) {
-              document
-                .getElementById("pits0")
-                .appendChild(createPit(index, seeds));
-            } else {
-              document
-                .getElementById("pits1")
-                .appendChild(createPit(index, seeds));
-            }
-          }
         });
         document.body.style.backgroundColor =
           boardState.turn === 0 ? "#eb6157" : "#5797eb";
