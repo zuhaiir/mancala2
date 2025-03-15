@@ -65,13 +65,15 @@ function makeMove(
   }
 
   // Capture logic
+  const oppositePit = 12 - currentPit;
+  const capturedSeeds = board.pits[oppositePit];
+  // opponent should have at least one seed in their pit
   if (
     currentPit >= rangeMin &&
     currentPit < rangeMax &&
-    board.pits[currentPit] === 1
+    board.pits[currentPit] === 1 &&
+    capturedSeeds > 0
   ) {
-    const oppositePit = 12 - currentPit;
-    const capturedSeeds = board.pits[oppositePit];
     board.pits[oppositePit] = 0;
     board.pits[(player + 1) * 6 + player] += capturedSeeds + 1;
     board.pits[currentPit] = 0;
